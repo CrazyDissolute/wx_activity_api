@@ -11,3 +11,5 @@ tmp
 database/development.sqlite
 
 config/database.js
+
+upload

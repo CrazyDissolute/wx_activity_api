@@ -76,7 +76,7 @@ class ActivityController {
     const page = query.page || 1
     const perPage = 10
 
-    const activityData = await Database.select(activityTable+'.id', activityTable+'.unionid', activityTable+'.title', activityTable+'.act_type', activityTable+'.act_time', userTable+'.nickname').from(activityTable)
+    const activityData = await Database.select(activityTable+'.id', activityTable+'.unionid', activityTable+'.title', activityTable+'.ad_status', activityTable+'.act_type', activityTable+'.act_time', userTable+'.nickname').from(activityTable)
       .leftJoin(userTable, activityTable+'.unionid', userTable+'.unionid')
       .orderBy('id', 'desc')
       .paginate(page, perPage)
@@ -200,10 +200,10 @@ class ActivityController {
     if(type==0){
       const glory = await Database.select(userTable+'.nickname', userTable+'.avatarurl')
         .count(joinTable+'.unionid as number').from(joinTable)
+        .leftJoin(activityTable, joinTable+'.activity_id', activityTable+'.id')
+        .where({'ad_status': 2})
         .leftJoin(userTable, joinTable+'.unionid', userTable+'.unionid')
         .where({'is_join': 1})
-        .leftJoin(activityTable, joinTable+'.unionid', activityTable+'.unionid')
-        .where({'ad_status': 2})
         .orderBy('number', 'desc')
         .groupBy(joinTable+'.unionid')
         .paginate(page, perPage)
@@ -216,10 +216,10 @@ class ActivityController {
       })
       const glory = await Database.select(userTable+'.nickname', userTable+'.avatarurl')
         .count(joinTable+'.unionid as number').from(joinTable)
+        .leftJoin(activityTable, joinTable+'.activity_id', activityTable+'.id')
+        .where({'ad_status': 2})
         .leftJoin(userTable, joinTable+'.unionid', userTable+'.unionid')
         .where({'is_join': 1})
-        .leftJoin(activityTable, joinTable+'.unionid', activityTable+'.unionid')
-        .where({'ad_status': 2})
         .whereIn('activity_id', findId)
         .orderBy('number', 'desc')
         .groupBy(joinTable+'.unionid')
@@ -254,6 +254,35 @@ class ActivityController {
     }else{
       return response.status(200).json({error: 1, message: 'fail'})
     }
+  }
+
+  async myActivity({request, response}){
+
+    const { userInfo:{unionid}} = request.post()
+    if(unionid){
+      const query = request.get()
+      const page = query.page || 1
+      const perPage = 10
+
+      const activityData = await Database.select(activityTable+'.id', activityTable+'.unionid', activityTable+'.title', activityTable+'.ad_status', activityTable+'.act_type', activityTable+'.act_time', userTable+'.nickname')
+        .from(activityTable)
+        .leftJoin(userTable, activityTable+'.unionid', userTable+'.unionid')
+        .where(activityTable+'.ad_status', 2)
+        .leftJoin(joinTable, activityTable+'.id', joinTable+'.activity_id')
+        .where(joinTable+'.is_join', 1)
+        .where(joinTable+'.unionid', unionid)
+        .orderBy(activityTable+'.id', 'desc')
+        .paginate(page, perPage)
+
+      return response.status(200).json({activityData})
+    }else{
+      return response.status(200).json({error: 1, message: 'fail'})
+    }
+
+  }
+
+  async upateStatus({request, response}){
+    await Database.raw(`update activity set ad_status=2 where  act_time  < (NOW() - interval 24 hour)`)
   }
 
 }

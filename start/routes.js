@@ -47,4 +47,8 @@ Route.group(()=>{
 
   Route.post('destroyPhoto', 'ActivityController.destroyPhoto').middleware(['checkss', 'auth'])
 
+  Route.get('myActivity', 'ActivityController.myActivity').middleware(['checkss', 'auth'])
+
+  Route.get('upateStatus', 'ActivityController.upateStatus')
+
 }).prefix('/wedemo/')
