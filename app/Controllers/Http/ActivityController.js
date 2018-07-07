@@ -3,6 +3,12 @@
 const Database = use('Database')
 const Drive = use('Drive')
 const Helpers = use('Helpers')
+const exec = use('child_process').exec
+const moment = use('moment')
+
+const Redis = use('Redis')
+const { wxCF } = use('App/Helpers/config')
+const { appid, secret } = wxCF()
 
 const globalFn = use('App/Helpers/GlobalFn')
 const got = use('got')
@@ -16,8 +22,9 @@ const photoTable = 'activity_photos'
 class ActivityController {
 
 	async newActivity({request, response, auth}){
-
-		const saveData = await globalFn.formatSubmitData(activityTable, request.post())
+		const query = request.post()
+    
+		const saveData = await globalFn.formatSubmitData(activityTable, {...query})
 		saveData.created_at = new Date()
 		saveData.updated_at = new Date()
 
@@ -28,23 +35,35 @@ class ActivityController {
 
 			const { wx_access_token } = request.body
 			//console.log(wx_access_token)
-
+			let url = encodeURIComponent(`/JBL/activity/join/join?id=${actID}`)
 			let postData = {
-				path: "JBL/activity/join/join?id="+actID,
+				path: `/JBL/index?share_query=${url}`,
 				scene: "",
 				width: 120,
 				auto_color: false
 			}
 
 			let imgName = `${(new Date().getTime()).toString(32)+Math.random().toString(16).substr(2)}${actID}.jpg`
+			// A 接口二维码
 			let save = await got.stream(`https://api.weixin.qq.com/wxa/getwxacode?access_token=${wx_access_token}`,{body: JSON.stringify(postData)}).pipe(fs.createWriteStream(Helpers.appRoot('upload/')+`${imgName}`))
 
 			await Database.table(activityTable).update({ad_code: imgName}).where({id: actID})
 
 			const exists = await Drive.exists(Helpers.appRoot('upload/') + `${imgName}`)
 
-      await Database.table(joinTable).insert({activity_id: actID, unionid: saveData.unionid, created_at: new Date()})
-
+			await Database.table(joinTable).insert({activity_id: actID, form_id: query.formId, open_id: query.openId, unionid: saveData.unionid, created_at: new Date()})
+      		
+			//活动开始前30分提醒
+			//let sendTime = new Date(query.act_time).getTime() - 30 * 60 * 1000
+			//sendTime = moment(sendTime).format('HH:mm MM/DD/YYYY')
+			//await exec(`at now + 1 minutes <<ENDMARKER \n curl http://127.0.0.1/wedemo/remind/${actID} \n ENDMARKER`)
+			let sendTime = moment(new Date(query.act_time).getTime()).subtract(30, 'minutes').format('HH:mm MM/DD/YYYY')
+			await exec(`at ${sendTime} <<ENDMARKER \n curl http://127.0.0.1/wedemo/remind/${actID} \n ENDMARKER`)
+			
+			//活动开始后一天时间自动关闭
+			let closeTime = moment(new Date(query.act_time).getTime()).add(1, 'days').format('HH:mm MM/DD/YYYY')
+			await exec(`at ${closeTime} <<ENDMARKER \n curl http://127.0.0.1/wedemo/remind/${actID} \n ENDMARKER`)
+				
 			return response.status(200).json({id: actID})
 		}
 
@@ -85,9 +104,9 @@ class ActivityController {
 	}
 
 	async joinActivity({request, response}){
-		const { activity_id, userInfo: { unionid } } = request.post()
+		const { activity_id, form_id, open_id, userInfo: { unionid } } = request.post()
     //const { userInfo: { unionid } } = request.body
-    const query = { activity_id, unionid }
+    const query = { activity_id, unionid, form_id, open_id }
 
 		const isJoin = await Database.table(joinTable).where(query).first()
     query.created_at = new Date()
@@ -145,13 +164,13 @@ class ActivityController {
   }
 
   async uploadFile({request, response}){
-    console.log(request)
+    //console.log(request)
     const {activity_id, userInfo:{unionid}} = request.post()
     const actId = await Database.table(activityTable).where({id: activity_id, unionid}).first()
 
     if(actId){
       const ThumbInfo = await globalFn.uploadPic(request, 'thumb_img', {upSize:3})
-      console.log(ThumbInfo)
+      //console.log(ThumbInfo)
       let imgMsg = ''
       let picName = ''
       if(ThumbInfo && ThumbInfo.status=='error'){
@@ -283,6 +302,64 @@ class ActivityController {
 
   async upateStatus({request, response}){
     await Database.raw(`update activity set ad_status=2 where  act_time  < (NOW() - interval 24 hour)`)
+  }
+
+  async remind({request, response, params:{ id }}){
+    const actInfo =  await Database.select('title','act_time', 'address', 'address_name').from(activityTable).where({id}).whereIn('ad_status', [0,1]).first()
+    if(actInfo){
+    	const userJobInfo =  await Database.select('id','activity_id', 'form_id', 'open_id').from(joinTable).where({activity_id: id})
+
+        let address = actInfo.address_name==''?actInfo.address:actInfo.address_name
+
+        let sendData = {
+          "keyword1": {
+            "value": actInfo.title
+          },
+          "keyword2": {
+            "value": actInfo.act_time.toString()
+          },
+          "keyword3": {
+            "value": address
+          } ,
+          "keyword4": {
+            "value": "30分钟后开始了"
+          }
+        }
+
+        let cachedUsers = await Redis.get('wx_access_token')
+        if(!cachedUsers){
+          let wxCode = await got.get(`https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${appid}&secret=${secret}`, {})
+          let codeKey = JSON.parse(wxCode.body).access_token
+
+          await Redis.set('wx_access_token', codeKey, 'EX', 7000)
+          cachedUsers = codeKey
+        }
+        //console.log(cachedUsers)
+    		let url = encodeURIComponent(`/JBL/activity/join/join?id=${id}`)
+        userJobInfo.forEach(item=>{
+          let postData = {
+            "touser": item.open_id,
+            "template_id": "vWQlhv_r75qIpD17tueANUkc8t3OE6LomqasWgBf-BU",
+            "page": `/JBL/index?share_query=${url}`,
+            "form_id": item.form_id,
+            "data": sendData
+          }
+          //console.log(postData)
+          const resSt = got.post(`https://api.weixin.qq.com/cgi-bin/message/wxopen/template/send?access_token=${cachedUsers}`,{body: JSON.stringify(postData)})
+        })
+    }
+    
+  }
+
+  async test({request, response}){
+	  await exec('at now + 1 minutes <<ENDMARKER \n curl http://127.0.0.1/wedemo/remind/1 \n ENDMARKER', function (error, stdout, stderr) {
+      if(error) {
+        console.log('get weather api error:'+stderr);
+      } else {
+	      //console.log(stdout)
+      }
+    })
+    //return response.status(200).json({ls})
   }
 
 }

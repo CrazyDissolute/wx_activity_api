@@ -51,4 +51,8 @@ Route.group(()=>{
 
   Route.get('upateStatus', 'ActivityController.upateStatus')
 
+  Route.get('remind/:id', 'ActivityController.remind')
+
+  Route.get('test', 'ActivityController.test')
+
 }).prefix('/wedemo/')

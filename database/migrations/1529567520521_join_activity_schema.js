@@ -9,6 +9,8 @@ class JoinActivitySchema extends Schema {
       table.integer('activity_id', 8)
       table.string('unionid', 64)
       table.boolean('is_join', 2).defaultTo(0)
+      table.string('form_id', 32)
+      table.string('open_id', 32)
       table.timestamps()
     })
   }
