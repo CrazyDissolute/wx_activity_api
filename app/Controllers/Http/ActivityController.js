@@ -18,19 +18,21 @@ const activityTable = 'activity'
 const userTable = 'users'
 const joinTable = 'join_activity'
 const photoTable = 'activity_photos'
+const themeTable = 'themes'
 
 class ActivityController {
 
 	async newActivity({request, response, auth}){
 		const query = request.post()
-    
+    const { userInfo: {unionid} } = request.post()
 		const saveData = await globalFn.formatSubmitData(activityTable, {...query})
 		saveData.created_at = new Date()
 		saveData.updated_at = new Date()
+    saveData.unionid = unionid
 
-		const uid = await Database.select('unionid').from(userTable).where('unionid', saveData.unionid).first()
+		const uid = await Database.select('unionid').from(userTable).where({unionid}).first()
 
-		if(saveData.unionid && uid){
+		if(unionid && uid){
 			const actID = await Database.table(activityTable).insert(saveData)
 
 			const { wx_access_token } = request.body
@@ -51,19 +53,17 @@ class ActivityController {
 
 			const exists = await Drive.exists(Helpers.appRoot('upload/') + `${imgName}`)
 
-			await Database.table(joinTable).insert({activity_id: actID, form_id: query.formId, open_id: query.openId, unionid: saveData.unionid, created_at: new Date()})
-      		
+			await Database.table(joinTable).insert({activity_id: actID, form_id: query.formId, open_id: query.openId, unionid, created_at: new Date()})
+
 			//活动开始前30分提醒
-			//let sendTime = new Date(query.act_time).getTime() - 30 * 60 * 1000
-			//sendTime = moment(sendTime).format('HH:mm MM/DD/YYYY')
-			//await exec(`at now + 1 minutes <<ENDMARKER \n curl http://127.0.0.1/wedemo/remind/${actID} \n ENDMARKER`)
 			let sendTime = moment(new Date(query.act_time).getTime()).subtract(30, 'minutes').format('HH:mm MM/DD/YYYY')
-			await exec(`at ${sendTime} <<ENDMARKER \n curl http://127.0.0.1/wedemo/remind/${actID} \n ENDMARKER`)
-			
+			await exec(`at ${sendTime} <<ENDMARKER \n curl https://oa.jiebeili.cn/wedemo/v0/remind/${actID} \n ENDMARKER`)
+			//await exec(`at now + 1 minutes <<ENDMARKER \n curl https://oa.jiebeili.cn/wedemo/v0/remind/${actID} \n ENDMARKER`)
+
 			//活动开始后一天时间自动关闭
 			let closeTime = moment(new Date(query.act_time).getTime()).add(1, 'days').format('HH:mm MM/DD/YYYY')
-			await exec(`at ${closeTime} <<ENDMARKER \n curl http://127.0.0.1/wedemo/remind/${actID} \n ENDMARKER`)
-				
+			await exec(`at ${closeTime} <<ENDMARKER \n curl https://oa.jiebeili.cn/wedemo/v0/upateStatus/${actID} \n ENDMARKER`)
+
 			return response.status(200).json({id: actID})
 		}
 
@@ -132,6 +132,7 @@ class ActivityController {
 
 	async getJoin({request, response, params: {id}}){
 
+    const { userInfo:{unionid}} = request.post()
 		const query = request.get()
     const page = query.page || 1
     const perPage = 10
@@ -145,10 +146,15 @@ class ActivityController {
 
     const activityInfo = await Database.select('*').from(activityTable).where({id}).first()
 
-    const oldFiles = await Database.select('photo_url').from(photoTable).where({activity_id: id})
+    const oldFiles = await Database.select('photo_url').from(photoTable).where({activity_id: id, unionid})
 
 		return response.status(200).json({joinData, join_count, activityInfo, oldFiles})
 	}
+
+	async getTheme({request, response}){
+    let themeInfo = await Database.select('*').table(themeTable)
+    return response.status(200).json({themeInfo})
+  }
 
 	async changeActStatus({request, response}){
 
@@ -166,9 +172,8 @@ class ActivityController {
   async uploadFile({request, response}){
     //console.log(request)
     const {activity_id, userInfo:{unionid}} = request.post()
-    const actId = await Database.table(activityTable).where({id: activity_id, unionid}).first()
 
-    if(actId){
+    if(unionid){
       const ThumbInfo = await globalFn.uploadPic(request, 'thumb_img', {upSize:3})
       //console.log(ThumbInfo)
       let imgMsg = ''
@@ -182,7 +187,7 @@ class ActivityController {
         picName = ThumbInfo.fileName
         imgMsg += 'ok'
 
-        const joinId = await Database.from(photoTable).insert({activity_id, photo_url: picName, created_at: new Date()})
+        const joinId = await Database.from(photoTable).insert({activity_id, unionid, photo_url: picName, created_at: new Date()})
 
         return response.status(200).json({picName, message: imgMsg})
       }
@@ -300,66 +305,79 @@ class ActivityController {
 
   }
 
-  async upateStatus({request, response}){
-    await Database.raw(`update activity set ad_status=2 where  act_time  < (NOW() - interval 24 hour)`)
-  }
+  async upateStatus({request, response, params: { id }}){
+    //console.log(id)
+    //await Database.raw(`update activity set ad_status=2 where  act_time  < (NOW() - interval 24 hour)`)
+    await Database.table(activityTable).update({ad_status: 2}).where({id})
+	}
 
   async remind({request, response, params:{ id }}){
+
     const actInfo =  await Database.select('title','act_time', 'address', 'address_name').from(activityTable).where({id}).whereIn('ad_status', [0,1]).first()
     if(actInfo){
     	const userJobInfo =  await Database.select('id','activity_id', 'form_id', 'open_id').from(joinTable).where({activity_id: id})
 
-        let address = actInfo.address_name==''?actInfo.address:actInfo.address_name
+      let address = actInfo.address_name==''?actInfo.address:actInfo.address_name
+      let stime = moment(new Date(actInfo.act_time).getTime()).format('YYYY-MM-DD HH:mm')
 
-        let sendData = {
-          "keyword1": {
-            "value": actInfo.title
-          },
-          "keyword2": {
-            "value": actInfo.act_time.toString()
-          },
-          "keyword3": {
-            "value": address
-          } ,
-          "keyword4": {
-            "value": "30分钟后开始了"
-          }
+      let sendData = {
+        "keyword1": {
+          "value": actInfo.title
+        },
+        "keyword2": {
+          "value": stime.toString()
+        },
+        "keyword3": {
+          "value": address
+        } ,
+        "keyword4": {
+          "value": "30分钟后开始了"
+        }
+      }
+
+      let cachedUsers = await Redis.get('wx_access_token')
+      if(!cachedUsers){
+        let wxCode = await got.get(`https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${appid}&secret=${secret}`, {})
+        let codeKey = JSON.parse(wxCode.body).access_token
+
+        await Redis.set('wx_access_token', codeKey, 'EX', 7000)
+        cachedUsers = codeKey
+      }
+      //console.log(cachedUsers)
+      let url = encodeURIComponent(`/JBL/activity/join/join?id=${id}`)
+      let postData = {}
+
+      userJobInfo.forEach(item=>{
+        postData = {
+          "touser": item.open_id,
+          "template_id": "vWQlhv_r75qIpD17tueANUkc8t3OE6LomqasWgBf-BU",
+          "page": `JBL/index?share_query=${url}`,
+          "form_id": item.form_id,
+          "data": sendData
         }
 
-        let cachedUsers = await Redis.get('wx_access_token')
-        if(!cachedUsers){
-          let wxCode = await got.get(`https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${appid}&secret=${secret}`, {})
-          let codeKey = JSON.parse(wxCode.body).access_token
+        got.post(`https://api.weixin.qq.com/cgi-bin/message/wxopen/template/send?access_token=${cachedUsers}`,{body: JSON.stringify(postData)})
 
-          await Redis.set('wx_access_token', codeKey, 'EX', 7000)
-          cachedUsers = codeKey
-        }
-        //console.log(cachedUsers)
-    		let url = encodeURIComponent(`/JBL/activity/join/join?id=${id}`)
-        userJobInfo.forEach(item=>{
-          let postData = {
-            "touser": item.open_id,
-            "template_id": "vWQlhv_r75qIpD17tueANUkc8t3OE6LomqasWgBf-BU",
-            "page": `/JBL/index?share_query=${url}`,
-            "form_id": item.form_id,
-            "data": sendData
-          }
-          //console.log(postData)
-          const resSt = got.post(`https://api.weixin.qq.com/cgi-bin/message/wxopen/template/send?access_token=${cachedUsers}`,{body: JSON.stringify(postData)})
-        })
+      })
+
+      return response.status(200).json({message: 'OK'})
     }
-    
+
   }
 
   async test({request, response}){
-	  await exec('at now + 1 minutes <<ENDMARKER \n curl http://127.0.0.1/wedemo/remind/1 \n ENDMARKER', function (error, stdout, stderr) {
-      if(error) {
-        console.log('get weather api error:'+stderr);
-      } else {
-	      //console.log(stdout)
-      }
-    })
+	 //  await exec('at now + 1 minutes <<ENDMARKER \n curl http://127.0.0.1/wedemo/remind/1 \n ENDMARKER', function (error, stdout, stderr) {
+    //   if(error) {
+    //     console.log('get weather api error:'+stderr);
+    //   } else {
+	 //      //console.log(stdout)
+    //   }
+    // })
     //return response.status(200).json({ls})
+
+    let stime = moment(new Date('2018-07-09 17:00:00').getTime()).format('YYYY-MM-DD HH:mm')
+    console.log(stime)
+    return response.status(200).json({stime})
   }
 
 }

@@ -8,6 +8,8 @@ const axios = use('axios')
 
 const fs = use('fs')
 
+const got = use('got')
+
 class GlobalFnClass {
 
   //结合表单与表中字段有效的数据
@@ -25,12 +27,12 @@ class GlobalFnClass {
     return saveData
   }
 
-  static AXIOS(URL,DATA){
-	  return new Promise((resolve,reject)=>{
-		  axios.post(URL,DATA).then(res=>{
-			  resolve(res.data)
-		  })
-	  })
+  static pushMsg(cachedUsers, postData){
+    return new Promise((resolve,reject)=>{
+      resolve(got.post(`https://api.weixin.qq.com/cgi-bin/message/wxopen/template/send?access_token=${cachedUsers}`,{body: JSON.stringify(postData)}))
+    })
+	  //return await got.post(`https://api.weixin.qq.com/cgi-bin/message/wxopen/template/send?access_token=${cachedUsers}`,{body: JSON.stringify(postData)})
+
   }
 
   static saveFile(filePath, fileData) {

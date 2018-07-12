@@ -35,7 +35,9 @@ Route.group(()=>{
 
   Route.post('checkJoin', 'ActivityController.checkJoin')
 
-  Route.get('getJoin/:id', 'ActivityController.getJoin')
+  Route.get('getJoin/:id', 'ActivityController.getJoin').middleware(['checkss', 'auth'])
+
+  Route.get('getTheme', 'ActivityController.getTheme')
 
   Route.post('changeActStatus', 'ActivityController.changeActStatus').middleware(['checkss', 'auth'])
 
@@ -49,10 +51,10 @@ Route.group(()=>{
 
   Route.get('myActivity', 'ActivityController.myActivity').middleware(['checkss', 'auth'])
 
-  Route.get('upateStatus', 'ActivityController.upateStatus')
+  Route.get('upateStatus/:id', 'ActivityController.upateStatus')
 
   Route.get('remind/:id', 'ActivityController.remind')
 
   Route.get('test', 'ActivityController.test')
 
-}).prefix('/wedemo/')
+}).prefix('/wedemo/v0/')

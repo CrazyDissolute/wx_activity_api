@@ -7,7 +7,7 @@ class ActivityPhotosSchema extends Schema {
     this.create('activity_photos', (table) => {
       table.increments()
       table.integer('activity_id', 8)
-      table.integer('unionid', 8)
+      table.string('unionid', 64)
       table.string('photo_url', 128)
       table.timestamps()
     })
