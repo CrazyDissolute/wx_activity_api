@@ -58,18 +58,18 @@ class GlobalFnClass {
 	  });
 	 }
 
-  static async uploadPic(requestFile, picFile, {width=450, height=450, upSize=3}, path="upload"){
+  static async uploadPic(requestFile, picFile, {width=450, height=450, upSize=5}, path="upload"){
     //console.log(requestFile)
 
     const profilePic = requestFile.file(picFile, {
-      types: ['image'],
+      //types: ['image'],
       size: upSize+'mb'
     })
 
     //console.log(profilePic)
 
     if(profilePic){
-
+    		//console.log(profilePic.clientName)
       if(profilePic && profilePic.clientName){
 
         await profilePic.move(Helpers.appRoot(path), {

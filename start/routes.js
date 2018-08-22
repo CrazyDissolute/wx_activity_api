@@ -27,6 +27,8 @@ Route.group(()=>{
 
   Route.post('newActivity', 'ActivityController.newActivity').middleware(['checkss', 'auth'])
 
+  Route.post('editActivity/:id', 'ActivityController.editActivity').middleware(['checkss', 'auth'])
+
   Route.get('getActivity/:id', 'ActivityController.getActivity').middleware(['checkss', 'auth'])
 
   Route.get('listActivity', 'ActivityController.listActivity')
