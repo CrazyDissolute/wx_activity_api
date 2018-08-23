@@ -169,8 +169,11 @@ class ActivityController {
     const activityInfo = await Database.select('*').from(activityTable).where({id}).first()
 
     const oldFiles = await Database.select('photo_url').from(photoTable).where({activity_id: id, unionid})
+    
+    const isJoin = await Database.table(joinTable).where({activity_id:id, unionid}).first()
+    let is_join = isJoin ? true : false
 
-    return response.status(200).json({joinData, join_count, activityInfo, oldFiles})
+    return response.status(200).json({joinData, join_count, activityInfo, oldFiles, isJoin: is_join})
   }
 
   async getTheme({request, response}) {
@@ -243,6 +246,11 @@ class ActivityController {
     const page = query.page || 1
     const type = query.type || 0
     const perPage = 10
+    
+    const count = await Database.from(userTable)
+    		.leftJoin(joinTable, userTable + '.unionid', joinTable + '.unionid')
+        .where({'is_join': 1})
+        .count()
 
     if (type == 0) {
       const glory = await Database.select(userTable + '.nickname', userTable + '.avatarurl')
@@ -254,6 +262,9 @@ class ActivityController {
         .orderBy('number', 'desc')
         .groupBy(joinTable + '.unionid')
         .paginate(page, perPage)
+        
+      glory.total = count[0]['count(*)']
+      glory.lastPage = Math.ceil(count[0]['count(*)']/perPage)
 
       return response.status(200).json({glory})
     } else {
@@ -271,6 +282,9 @@ class ActivityController {
         .orderBy('number', 'desc')
         .groupBy(joinTable + '.unionid')
         .paginate(page, perPage)
+        
+        glory.total = count[0]['count(*)']
+      	glory.lastPage = Math.ceil(count[0]['count(*)']/perPage)
 
       return response.status(200).json({glory})
     }
