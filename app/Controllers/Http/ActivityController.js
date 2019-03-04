@@ -12,6 +12,7 @@ const {appid, secret} = wxCF()
 
 const globalFn = use('App/Helpers/GlobalFn')
 const got = use('got')
+const axios = use('axios')
 const fs = use('fs')
 
 const activityTable = 'activity'
@@ -47,7 +48,13 @@ class ActivityController {
 
       let imgName = `${(new Date().getTime()).toString(32) + Math.random().toString(16).substr(2)}${actID}.jpg`
       // A 接口二维码
-      let save = await got.stream(`https://api.weixin.qq.com/wxa/getwxacode?access_token=${wx_access_token}`, {body: JSON.stringify(postData)}).pipe(fs.createWriteStream(Helpers.appRoot('upload/') + `${imgName}`))
+      // let save = await got.stream(`https://api.weixin.qq.com/wxa/getwxacode?access_token=${wx_access_token}`, {body: JSON.stringify(postData)}).pipe(fs.createWriteStream(Helpers.appRoot('upload/') + `${imgName}`));
+
+      // B
+      let save = await axios.post(`https://api.weixin.qq.com/wxa/getwxacode?access_token=${wx_access_token}`, {
+        ...postData
+      }, { responseType: 'stream' });
+      save.data.pipe(fs.createWriteStream(Helpers.appRoot('upload/') + `${imgName}`));
 
       await Database.table(activityTable).update({ad_code: imgName}).where({id: actID})
 
