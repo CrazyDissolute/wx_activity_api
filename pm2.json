@@ -1,0 +1,17 @@
+{
+  "apps": {
+    "name": "jbl-wx",
+    "cwd": "/home/www/wx/JBL",
+    "script": "./server.js",
+    "exec_interpreter": "nodejs",
+    "instances": "max",
+    "min_uptime": "60s",
+    "max_restarts": 30,
+    "exec_mode": "cluster_mode",
+    "error_file": "/home/log/jbl-wx-err.log",
+    "out_file": "/home/log/jbl-wx-out.log",
+    "pid_file": "/home/log/jbl-wx.pid",
+    "log_date_format" : "YYYY-MM-DD HH:mm Z",
+    "watch": true
+  }
+}
