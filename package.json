@@ -33,7 +33,7 @@
     "moment": "^2.22.2",
     "mysql": "^2.15.0",
     "request": "^2.87.0",
-    "yarn": "^1.9.4"
+    "yarn": "^1.22.0"
   },
   "devDependencies": {},
   "autoload": {
